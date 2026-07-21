@@ -74,6 +74,9 @@ textarea.control{min-height:90px;resize:vertical}
 .date-parts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .date-parts .control{text-align:center;direction:ltr;font-variant-numeric:tabular-nums}
 .latin-number{direction:ltr;unicode-bidi:plaintext;font-variant-numeric:tabular-nums;font-family:Arial,Tahoma,sans-serif}
+.date-preview{font-size:11px;color:var(--blue);margin-top:5px;min-height:16px}
+.date-calendar-label{display:block;margin:0 2px 5px;font-size:11px;font-weight:700;color:var(--navy)}
+.date-block.both-calendar .hijri-input{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
 .subsection{border-top:1px solid var(--line);margin-top:22px;padding-top:21px}
 .subsection-title{font-size:15px;font-weight:700;color:var(--navy);margin-bottom:12px}
 .button-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -193,6 +196,9 @@ textarea.control{min-height:90px;resize:vertical}
 .status-chip.bad{background:#FDEAEA;color:#9C3333}
 .overall-band{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:16px 0}
 .overall-band .num{font-size:34px;font-weight:700;color:var(--navy)}
+.overall-strip{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;padding:10px 15px;margin:13px 0;font-size:13px}
+.overall-strip span:first-child{color:var(--muted)}
+.overall-strip b{font-size:19px;color:var(--navy);margin-inline-start:auto}
 .cat-table-mini td:first-child{font-weight:600;color:var(--navy)}
 .recommend-list{margin:10px 0 0;padding-inline-start:20px}
 .recommend-list li{margin-bottom:6px;font-size:12.5px;line-height:1.8}
@@ -301,12 +307,30 @@ window.addEventListener('pageshow',()=>requestAnimationFrame(()=>window.scrollTo
 
         <div class="subsection">
           <div class="subsection-title">تاريخ إجراء التقييم</div>
-          <div class="date-switch"><button type="button" class="date-choice active" data-calendar="gregorian">ميلادي</button><button type="button" class="date-choice" data-calendar="hijri">هجري</button></div>
-          <div class="date-parts">
-            <input class="control live latin-number" id="evalDay" inputmode="numeric" maxlength="2" placeholder="اليوم">
-            <input class="control live latin-number" id="evalMonth" inputmode="numeric" maxlength="2" placeholder="الشهر">
-            <input class="control live latin-number" id="evalYear" inputmode="numeric" maxlength="4" placeholder="السنة">
+          <div class="date-switch" id="evalCalendarSwitch">
+            <button type="button" class="date-choice active" data-calendar="gregorian">ميلادي</button>
+            <button type="button" class="date-choice" data-calendar="hijri">هجري أم القرى</button>
+            <button type="button" class="date-choice" data-calendar="both">كلاهما</button>
           </div>
+          <div class="date-block">
+            <div class="gregorian-input">
+              <span class="date-calendar-label" hidden>التاريخ الميلادي</span>
+              <div class="date-parts">
+                <input class="control date-part latin-number" id="evalGDay" inputmode="numeric" maxlength="2" placeholder="اليوم">
+                <input class="control date-part latin-number" id="evalGMonth" inputmode="numeric" maxlength="2" placeholder="الشهر">
+                <input class="control date-part latin-number" id="evalGYear" inputmode="numeric" maxlength="4" placeholder="السنة">
+              </div>
+            </div>
+            <div class="hijri-input" hidden>
+              <span class="date-calendar-label" hidden>التاريخ الهجري أم القرى</span>
+              <div class="date-parts">
+                <input class="control date-part latin-number" id="evalHDay" inputmode="numeric" maxlength="2" placeholder="اليوم">
+                <input class="control date-part latin-number" id="evalHMonth" inputmode="numeric" maxlength="2" placeholder="الشهر">
+                <input class="control date-part latin-number" id="evalHYear" inputmode="numeric" maxlength="4" placeholder="السنة">
+              </div>
+            </div>
+          </div>
+          <div class="date-preview" id="evalPreview"></div>
         </div>
 
         <div class="subsection">
@@ -454,7 +478,7 @@ const REFERENCE_MAP = {
   association: {
     badge: 'نظام الجمعيات ولائحته التنفيذية',
     refText: 'نظام الجمعيات والمؤسسات الأهلية الصادر بالمرسوم الملكي رقم م/8، ولائحته التنفيذية الصادرة عن المركز الوطني لتنمية القطاع غير الربحي',
-    indicative: 'قواعد حوكمة الجمعيات الأهلية الصادرة عن وزارة الموارد البشرية والتنمية الاجتماعية، وهي قواعد استرشادية للجمعيات الأهلية ما لم ينص النظام أو لائحة أخرى أو قرار من الوزارة على إلزامية ما ورد فيها',
+    indicative: 'قواعد حوكمة الجمعيات والمؤسسات الأهلية الصادرة بقرار مجلس إدارة المركز الوطني لتنمية القطاع غير الربحي، وهي قواعد استرشادية للجمعيات الأهلية ما لم ينص النظام أو لائحة أخرى أو قرار من المركز على إلزامية ما ورد فيها',
     note: 'راجع اللائحة الأساسية للجمعية لأي متطلبات إضافية خاصة بتقييم أداء مجلس الإدارة أو تجديد عضويته.'
   },
   education: {
@@ -550,6 +574,64 @@ const RATING_OPTIONS = [
 ];
 
 let scope = 'collective';
+
+// --- Hijri/Gregorian synced date system (Umm al-Qura, matching majalis tool) ---
+const latinDigits = value => String(value ?? '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+const digitsOnly = (value, maxLength = 0) => { let out = latinDigits(value).replace(/\D/g, ''); return maxLength ? out.slice(0, maxLength) : out; };
+
+let calendar = 'gregorian';
+let dateEditSource = 'gregorian';
+
+const hijriFmt = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', {day:'numeric', month:'numeric', year:'numeric', timeZone:'UTC'});
+const hijriDisplay = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn', {day:'numeric', month:'long', year:'numeric', timeZone:'UTC'});
+const gregDisplay = new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', {day:'numeric', month:'long', year:'numeric', timeZone:'UTC'});
+const hijriCache = new Map();
+
+function gregorianToDate(y, m, d){ y=Number(latinDigits(y)); m=Number(latinDigits(m)); d=Number(latinDigits(d)); if(!y||!m||!d||m<1||m>12||d<1||d>31) return null; const out=new Date(Date.UTC(y,m-1,d)); return out.getUTCFullYear()===y && out.getUTCMonth()===m-1 && out.getUTCDate()===d ? out : null; }
+function hijriToDate(y, m, d){ y=Number(latinDigits(y)); m=Number(latinDigits(m)); d=Number(latinDigits(d)); if(!y||!m||!d||m<1||m>12||d<1||d>30) return null; const key=`${y}/${m}/${d}`; if(hijriCache.has(key)) return hijriCache.get(key); const approx=Math.floor(y*0.970224+621.5774); let cur=new Date(Date.UTC(approx-1,0,1)); const end=new Date(Date.UTC(approx+1,11,31)); while(cur<=end){ const parts=Object.fromEntries(hijriFmt.formatToParts(cur).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)])); if(parts.year===y && parts.month===m && parts.day===d){ const out=new Date(cur); hijriCache.set(key,out); return out; } cur.setUTCDate(cur.getUTCDate()+1); } return null; }
+function hijriPartsFromDate(d){ return Object.fromEntries(hijriFmt.formatToParts(d).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)])); }
+function getDateByCalendar(calendarKind){ return calendarKind==='hijri' ? hijriToDate($('evalHYear').value,$('evalHMonth').value,$('evalHDay').value) : gregorianToDate($('evalGYear').value,$('evalGMonth').value,$('evalGDay').value); }
+function setDateInputs(calendarKind, d){
+  if(!d) return;
+  if(calendarKind==='hijri'){ const parts=hijriPartsFromDate(d); $('evalHDay').value=String(parts.day); $('evalHMonth').value=String(parts.month); $('evalHYear').value=String(parts.year); }
+  else { $('evalGDay').value=String(d.getUTCDate()); $('evalGMonth').value=String(d.getUTCMonth()+1); $('evalGYear').value=String(d.getUTCFullYear()); }
+}
+function clearDateInputs(calendarKind){ const prefix = calendarKind==='hijri' ? 'H' : 'G'; ['Day','Month','Year'].forEach(part => $('eval'+prefix+part).value=''); }
+function syncDatePair(source){ const d=getDateByCalendar(source), target = source==='gregorian'?'hijri':'gregorian'; if(!d){ clearDateInputs(target); return null; } setDateInputs(target, d); return d; }
+function getEvalDate(){
+  if(calendar==='gregorian' || calendar==='hijri') return getDateByCalendar(calendar);
+  return getDateByCalendar(dateEditSource) || getDateByCalendar(dateEditSource==='gregorian'?'hijri':'gregorian');
+}
+function numericGregorianDate(d){ return `${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${d.getUTCFullYear()}`; }
+function numericHijriDate(d){ const parts=hijriPartsFromDate(d); return `${String(parts.day).padStart(2,'0')}/${String(parts.month).padStart(2,'0')}/${parts.year}`; }
+function formatBothDate(d){ if(!d) return 'غير مدخل'; return `⁦${numericHijriDate(d)}⁩ هـ الموافق ⁦${numericGregorianDate(d)}⁩ م`; }
+function formatDateFor(d, calendarKind){
+  if(!d) return 'غير مدخل';
+  if(calendarKind==='both') return formatBothDate(d);
+  return calendarKind==='hijri' ? `⁦${numericHijriDate(d)}⁩ هـ` : `⁦${numericGregorianDate(d)}⁩ م`;
+}
+function setCalendar(kind){
+  const previous = calendar;
+  calendar = kind;
+  document.querySelectorAll('#evalCalendarSwitch .date-choice').forEach(b=>b.classList.toggle('active', b.dataset.calendar===kind));
+  const gInput = document.querySelector('.gregorian-input'), hInput = document.querySelector('.hijri-input'), block = document.querySelector('.date-block');
+  gInput.hidden = kind==='hijri';
+  hInput.hidden = kind==='gregorian';
+  document.querySelectorAll('.date-calendar-label').forEach(x=>x.hidden = kind!=='both');
+  block.classList.toggle('both-calendar', kind==='both');
+  if(kind==='both'){
+    let source = previous==='hijri' ? 'hijri' : previous==='gregorian' ? 'gregorian' : dateEditSource;
+    if(!getDateByCalendar(source)) source = getDateByCalendar('gregorian') ? 'gregorian' : 'hijri';
+    if(getDateByCalendar(source)){ dateEditSource=source; syncDatePair(source); }
+  }
+  updateDatePreview();
+}
+function updateDatePreview(){
+  const d = getEvalDate();
+  $('evalPreview').textContent = d ? (calendar==='both' ? '' : (calendar==='hijri' ? `الموافق ${gregDisplay.format(d)}` : `الموافق ${hijriDisplay.format(d)}`)) : '';
+}
+// --- end date system ---
+
 
 function currentCategories(){ return scope === 'individual' ? CATEGORIES_INDIVIDUAL : CATEGORIES_COLLECTIVE; }
 
@@ -707,13 +789,10 @@ function buildReportHTML(){
   const councilName = ($('councilName').value||'').trim();
   const evaluator = ($('evaluatorName').value||'').trim();
   const freq = $('evalFrequency').value;
-  const calLabel = document.querySelector('[data-calendar].active') ? document.querySelector('[data-calendar].active').textContent : 'ميلادي';
-  const day = $('evalDay').value, month = $('evalMonth').value, year = $('evalYear').value;
-  const dateText = (day && month && year) ? `${day}/${month}/${year} ${calLabel}` : 'غير مدخل';
+  const dateText = formatDateFor(getEvalDate(), calendar);
   const memberName = ($('memberName').value||'').trim();
   const memberRole = ($('memberRole').value||'').trim();
   const notes = ($('evalNotes').value||'').trim();
-  const ref = REFERENCE_MAP[entityType];
 
   const {catScores, overallPct} = computeScores();
   const overallCls = classify(overallPct);
@@ -740,7 +819,7 @@ function buildReportHTML(){
     ${evaluator?`<div class="meta-row"><span>مُعِد التقييم</span><strong>${esc(evaluator)}</strong></div>`:''}
   </div>`;
 
-  const overallHtml = `<div class="overall-band"><div><span style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">النتيجة الإجمالية</span><div class="num">${overallPct===null?'--':overallPct}<small style="font-size:16px;color:var(--muted)"> %</small></div></div><span class="status-chip ${overallCls.cls==='muted'?'warn':overallCls.cls}">${overallCls.label}</span></div>`;
+  const overallHtml = `<div class="overall-strip"><span>النتيجة الإجمالية</span><b>${overallPct===null?'--':overallPct}%</b><span class="status-chip ${overallCls.cls==='muted'?'warn':overallCls.cls}">${overallCls.label}</span></div>`;
 
   const catTableHtml = `<table class="doc-table"><thead><tr><th>المحور</th><th>النتيجة</th><th>التصنيف</th></tr></thead><tbody>${
     catScores.map(c=>{ const cc = classify(c.pct); return `<tr><td>${c.label}</td><td>${c.pct===null?'--':c.pct+'%'}</td><td><span class="status-chip ${cc.cls==='muted'?'warn':cc.cls}">${cc.label}</span></td></tr>`; }).join('')
@@ -759,22 +838,14 @@ function buildReportHTML(){
     <div class="doc-title">
       <small>منظومة أعمال المجالس | مقيّم مجالس</small>
       <h2>تقرير تقييم أداء ${scope==='individual' ? 'عضو' : (councilType==='committee'?'اللجنة':'المجلس')}</h2>
-      <p>وثيقة تقييم استرشادية معدة وفق المرجعية النظامية والممارسات الفضلى المناسبة لنوع الجهة</p>
     </div>
     <div class="doc-body">
       ${metaHtml}
-      <h3>المرجعية المعتمدة</h3>
-      <p><strong>المرجع:</strong> ${esc(ref.refText)}</p>
-      ${ref.indicative ? `<p><strong>المرجع الاسترشادي:</strong> ${esc(ref.indicative)}</p>` : ''}
-      <p>${esc(ref.note)}</p>
-      <p><strong>الممارسات الفضلى الدولية:</strong> ${esc(PRACTICE_REF.text)}</p>
-      <h3>نتيجة التقييم</h3>
       ${overallHtml}
       ${catTableHtml}
       <h3>توصيات مقترحة</h3>
       ${recsHtml}
       ${notesHtml}
-      <p style="margin-top:22px;font-size:10.5px;color:var(--muted)">هذا التقرير استرشادي للمساعدة الذاتية في تقييم الأداء، ولا يغني عن مراجعة أو تقييم معتمد من الجهة المختصة أو المستشار القانوني عند الحاجة.</p>
     </div>
     <div class="doc-footer">
       <div class="doc-footer-brand">
@@ -789,39 +860,39 @@ function printStylesheet(){
   return `@page{size:A4 portrait;margin:0}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}body{font-family:'IBM Plex Sans Arabic',Tahoma,Arial,sans-serif;color:#18202A;direction:rtl}
 :root{--navy:#0B1A2B;--navy2:#142A43;--gold:#C9A84C;--muted:#677386;--line:#DDE3EA}
-.print-page{width:210mm;min-height:297mm;padding:14mm 14mm 12mm;margin:0 auto;background:#fff;position:relative}
-.doc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;border-bottom:1px solid #DDE3EA;padding-bottom:4mm;margin-bottom:5mm}
+.print-page{width:210mm;min-height:297mm;padding:13mm 13mm 10mm;margin:0 auto;background:#fff;position:relative}
+.doc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;border-bottom:1px solid #DDE3EA;padding-bottom:3mm;margin-bottom:3.5mm}
 .doc-head.no-logo{justify-content:flex-end}
 .doc-head.no-logo .doc-org{text-align:right;margin-right:auto}
-.doc-logo{display:flex;min-width:32mm;min-height:14mm;align-items:center;justify-content:flex-start}
-.doc-logo img{display:block;max-width:45.6mm;max-height:20.4mm;width:auto;height:auto;object-fit:contain}
+.doc-logo{display:flex;min-width:32mm;min-height:12mm;align-items:center;justify-content:flex-start}
+.doc-logo img{display:block;max-width:42mm;max-height:17mm;width:auto;height:auto;object-fit:contain}
 .doc-org{text-align:left}
 .doc-org strong{display:block;font-size:11pt;color:#0B1A2B}
 .doc-org span{font-size:8pt;color:#677386}
-.doc-title{text-align:center;margin:6mm 0 5mm}
-.doc-title small{color:#927423;font-size:8.5pt;font-weight:700}
-.doc-title h2{font-size:17pt;line-height:1.35;color:#0B1A2B;margin:1mm 0}
-.doc-title p{font-size:9.5pt;margin:0;color:#465266}
-.doc-body{font-size:9.5pt;line-height:1.75;color:#18202A}
-.doc-body h3{font-size:11pt;color:#0B1A2B;margin:5mm 0 2mm;break-after:avoid}
-.doc-body p{margin:0 0 2.2mm}
-.meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid #DDE3EA;border-radius:3mm;overflow:hidden;margin:4mm 0;break-inside:avoid}
-.meta-row{display:flex;gap:2mm;padding:2.2mm 2.5mm;border-bottom:1px solid #E8ECF0}
-.meta-row span{color:#677386;min-width:30mm}
+.doc-title{text-align:center;margin:4mm 0 3.5mm}
+.doc-title small{color:#927423;font-size:8pt;font-weight:700}
+.doc-title h2{font-size:15pt;line-height:1.3;color:#0B1A2B;margin:1mm 0 0}
+.doc-body{font-size:9pt;line-height:1.6;color:#18202A}
+.doc-body h3{font-size:10.5pt;color:#0B1A2B;margin:3.5mm 0 1.8mm;break-after:avoid}
+.doc-body p{margin:0 0 1.8mm}
+.meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid #DDE3EA;border-radius:2.5mm;overflow:hidden;margin:3mm 0;break-inside:avoid}
+.meta-row{display:flex;gap:2mm;padding:1.8mm 2.5mm;border-bottom:1px solid #E8ECF0}
+.meta-row span{color:#677386;min-width:28mm}
 .meta-row strong{color:#263241}
-.doc-table{width:100%;border-collapse:collapse;table-layout:fixed;margin:4mm 0;font-size:8.7pt;break-inside:auto}
+.doc-table{width:100%;border-collapse:collapse;table-layout:fixed;margin:3mm 0;font-size:8.5pt;break-inside:auto}
 .doc-table tr{break-inside:avoid}
-.doc-table th,.doc-table td{border:1px solid #CDD4DD;padding:2.2mm;text-align:right;vertical-align:top;color:#18202A;overflow-wrap:anywhere}
+.doc-table th,.doc-table td{border:1px solid #CDD4DD;padding:1.8mm 2.2mm;text-align:right;vertical-align:top;color:#18202A;overflow-wrap:anywhere}
 .doc-table th{background:#F0F3F6;color:#0B1A2B;font-weight:700}
-.overall-band{display:flex;align-items:center;justify-content:space-between;gap:6mm;border:1px solid #DDE3EA;border-radius:3mm;padding:4mm 5mm;margin:4mm 0;break-inside:avoid}
-.overall-band .num{font-size:20pt;font-weight:700;color:#0B1A2B}
+.overall-strip{display:flex;align-items:center;gap:2.5mm;border:1px solid #DDE3EA;border-radius:2.5mm;padding:2.5mm 4mm;margin:3mm 0;break-inside:avoid;font-size:9pt}
+.overall-strip span:first-child{color:#677386}
+.overall-strip b{font-size:13pt;color:#0B1A2B;margin-inline-start:auto}
 .status-chip{display:inline-block;padding:1mm 2.5mm;border-radius:999px;font-size:8pt;font-weight:700}
 .status-chip.good{background:#E8F7EF;color:#25704F}
 .status-chip.warn{background:#FFF3D6;color:#8A6112}
 .status-chip.bad{background:#FDEAEA;color:#9C3333}
-.recommend-list{margin:2mm 0 0;padding-inline-start:5mm}
-.recommend-list li{margin-bottom:1.5mm;font-size:9pt;break-inside:avoid}
-.doc-footer{margin-top:8mm;display:flex;align-items:center;justify-content:space-between;gap:8mm;border-top:1px solid #DDE3EA;padding-top:2.5mm;font-size:7.5pt;color:#6F7A89}
+.recommend-list{margin:1.5mm 0 0;padding-inline-start:5mm}
+.recommend-list li{margin-bottom:1.3mm;font-size:8.7pt;break-inside:avoid}
+.doc-footer{margin-top:5mm;display:flex;align-items:center;justify-content:space-between;gap:8mm;border-top:1px solid #DDE3EA;padding-top:2.2mm;font-size:7.5pt;color:#6F7A89}
 .doc-footer a{color:#415065;text-decoration:none;direction:ltr}
 .doc-footer-brand{display:flex;align-items:center;gap:9px;min-width:0}
 .doc-footer-brand>div{display:flex;flex-direction:column;justify-content:center;min-width:0;line-height:1.35}
@@ -876,7 +947,7 @@ function applyFormValues(data){
 
 function saveWork(){
   if(!autoSaveReady) return;
-  const payload = {version:'v1.0.0', currentStep, scope, ratings, entityLogoSrc, fields: collectFormValues()};
+  const payload = {version:'v1.0.0', currentStep, scope, ratings, entityLogoSrc, calendar, dateEditSource, fields: collectFormValues()};
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); }catch(err){ console.error(err); }
 }
 function scheduleAutoSave(){ if(!autoSaveReady) return; clearTimeout(autoSaveTimer); autoSaveTimer = setTimeout(saveWork, 500); }
@@ -886,12 +957,13 @@ function restoreWork(){
   try{
     const payload = JSON.parse(raw);
     applyFormValues(payload.fields);
-    if(payload.fields && payload.fields.calendarChoice){}
     entityLogoSrc = payload.entityLogoSrc || '';
     renderLogoPreview();
     Object.assign(ratings, payload.ratings || {});
     setScope(payload.scope === 'individual' ? 'individual' : 'collective');
     updateReference();
+    dateEditSource = payload.dateEditSource === 'hijri' ? 'hijri' : 'gregorian';
+    setCalendar(payload.calendar === 'hijri' ? 'hijri' : payload.calendar === 'both' ? 'both' : 'gregorian');
     showStep(payload.currentStep || 1, false);
     return true;
   }catch(err){ console.error(err); localStorage.removeItem(STORAGE_KEY); return false; }
@@ -901,7 +973,7 @@ document.addEventListener('click', e => {
   const step = e.target.closest('[data-step]'); if(step) showStep(step.dataset.step);
   const go = e.target.closest('[data-go]'); if(go) showStep(go.dataset.go);
   const scopeBtn = e.target.closest('[data-scope]'); if(scopeBtn) setScope(scopeBtn.dataset.scope);
-  const calBtn = e.target.closest('[data-calendar]'); if(calBtn){ document.querySelectorAll('[data-calendar]').forEach(b=>b.classList.toggle('active', b===calBtn)); scheduleAutoSave(); }
+  const calBtn = e.target.closest('[data-calendar]'); if(calBtn){ setCalendar(calBtn.dataset.calendar); scheduleAutoSave(); }
   const scaleBtn = e.target.closest('.scale-btn'); if(scaleBtn) setRating(scaleBtn.dataset.item, scaleBtn.dataset.value);
   if(e.target.id === 'removeEntityLogo'){ entityLogoSrc=''; $('entityLogoInput').value=''; renderLogoPreview(); scheduleAutoSave(); }
   if(e.target.id === 'printReport') printReport();
@@ -911,13 +983,29 @@ document.addEventListener('change', e => {
   if(e.target.id === 'entityType') updateReference();
 });
 document.addEventListener('input', e => {
+  if(e.target.classList.contains('latin-number')){
+    const max = e.target.maxLength > 0 ? e.target.maxLength : 0;
+    const value = digitsOnly(e.target.value, max);
+    if(e.target.value !== value) e.target.value = value;
+  }
+  if(e.target.classList.contains('date-part')){
+    if(calendar==='both'){
+      const source = e.target.id.startsWith('evalH') ? 'hijri' : 'gregorian';
+      dateEditSource = source;
+      syncDatePair(source);
+    }
+    updateDatePreview();
+    if(currentStep===3) buildReportHTML();
+    scheduleAutoSave();
+    return;
+  }
   if(e.target.classList && e.target.classList.contains('live')){ if(currentStep===3 && (e.target.id==='entityName'||e.target.id==='evaluatorName'||e.target.id==='evalNotes'||e.target.id==='councilName')) buildReportHTML(); }
 });
 document.addEventListener('input', scheduleAutoSave);
 document.addEventListener('change', scheduleAutoSave);
 
 updateReference();
-if(!restoreWork()){ renderCriteria(); refreshScoreUI(); }
+if(!restoreWork()){ renderCriteria(); refreshScoreUI(); updateDatePreview(); }
 autoSaveReady = true;
 window.scrollTo({top:0,left:0,behavior:'auto'});
 </script>
